@@ -1,0 +1,94 @@
+public class RS_ClusterBomb_CompProperties : CompProperties
+    {
+        public RS_ClusterBomb_CompProperties()
+        {
+            this.compClass = typeof(RS_CompClusterBomb);
+        }
+        public int ClusterBurstCount = 1;
+        public int DismantlDistance = 1;
+
+        public ThingDef Projectile = null;
+
+        public bool DismantlDoExplosion = false;
+        public float ExplosionRadius = 0.5f;
+    }
+    public class RS_CompClusterBomb : ThingComp
+    {
+        public RS_ClusterBomb_CompProperties Props
+        {
+            get
+            {
+                return (RS_ClusterBomb_CompProperties)this.props;
+            }
+        }
+    }
+    public class Bullet_ClusterBomb : Projectile
+    {
+
+        public override void Tick()
+        {
+            if (this.landed)
+            {
+                return;
+            }
+            this.ticksToImpact--;
+            if (!this.ExactPosition.InBounds(this.Map))
+            {
+                this.ticksToImpact++;
+                this.Position = this.ExactPosition.ToIntVec3();
+                this.Destroy(DestroyMode.Vanish);
+                return;
+            }
+            if (this.ticksToImpact == 60 && Find.TickManager.CurTimeSpeed == TimeSpeed.Normal && this.def.projectile.soundImpactAnticipate != null)
+            {
+                this.def.projectile.soundImpactAnticipate.PlayOneShot(this);
+            }
+            if (this.ticksToImpact <= 0)
+            {
+                if (this.DestinationCell.InBounds(this.Map))
+                {
+                    this.Position = this.DestinationCell;
+                }
+                this.Destroy(DestroyMode.Vanish);
+                return;
+            }
+            this.tick++;
+            if (this.Dismantl())
+            {
+                this.Dismantling();
+            }
+        }
+        private bool Dismantl()
+        {
+            Vector3 exact = this.ExactPosition;
+            int x1 = this.DestinationCell.x;
+            int y1 = this.DestinationCell.z;
+            int x2 = (int)exact.ToIntVec3().x;
+            int y2 = (int)exact.ToIntVec3().z;
+            int L = Math.Abs((int)Math.Round(Math.Sqrt(Math.Pow((x1 - x2), 2) + Math.Pow((y1 - y2), 2))));
+            if (L <= this.GetComp<RS_CompClusterBomb>().Props.DismantlDistance && this.tick >=10)
+            {
+                this.tick = 0;
+                return true;
+            }
+            return false;
+        }
+
+
+        private void Dismantling()
+        {
+            ThingDef projectile = this.GetComp<RS_CompClusterBomb>().Props.Projectile;
+            if (this.GetComp<RS_CompClusterBomb>().Props.DismantlDoExplosion)
+            {
+                GenExplosion.DoExplosion(this.ExactPosition.ToIntVec3(), this.Map, this.GetComp<RS_CompClusterBomb>().Props.ExplosionRadius, DamageDefOf.Bomb, this, 40, 5f, null, null, null, null, null, 1f, 1, false, null, 0f, 1, 0f, false);
+            }
+            for (int i = 0; i < this.GetComp<RS_CompClusterBomb>().Props.ClusterBurstCount; i++)
+            {
+                ProjectileHitFlags projectileHitFlags = ProjectileHitFlags.All;
+                Projectile projectileF = (Projectile)GenSpawn.Spawn(projectile, this.ExactPosition.ToIntVec3(), this.Map, WipeMode.Vanish);
+                projectileF.Launch(this, this.ExactPosition, this.DestinationCell, this.DestinationCell, projectileHitFlags, ThingMaker.MakeThing(this.EquipmentDef), null);
+            }
+            this.Destroy(DestroyMode.Vanish);
+        }
+        private int tick = 0;
+    }
